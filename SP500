@@ -1,0 +1,92 @@
+from selenium import webdriver
+from openpyxl import load_workbook
+from newspaper import Article
+import time
+import random
+
+op = webdriver.ChromeOptions()
+op.add_argument('headless')
+op.add_argument("--no-sandbox")
+
+
+#chromedriver directory
+chromedriver_file='chromedriver' 
+driver= webdriver.Chrome(executable_path=chromedriver_file, options=op)
+
+wb = load_workbook('SP500.xlsx')
+sheet1 = wb['Sheet']
+sheet1['A1'] = 'Date'
+sheet1['B1'] = 'Title'
+sheet1['C1'] = 'Body'
+sheet1['D1'] = 'Images'
+titles=[]
+dates=[]
+urls=[]
+pages=[]
+imgs=[]
+contents=[]
+
+#URL
+pages.append(f'https://www.google.com/search?q=SP500&hl=en&gl=us&tbm=nws&sxsrf=ALeKk01DGNvt2_D0FUXt8XxnZfMs2iHuDQ:1613060804366&source=lnt&tbs=qdr:m&sa=X&start=0&ved=0ahUKEwip4vrhn-LuAhWvF6YKHehzA7MQpwUIKA&biw=1408&bih=703&dpr=1')
+
+#get the number of pages
+p=1
+while(p>0):
+    time.sleep(random.randint(1,3))
+    driver.get(f'https://www.google.com/search?q=SP500&hl=en&gl=us&tbm=nws&sxsrf=ALeKk01DGNvt2_D0FUXt8XxnZfMs2iHuDQ:1613060804366&source=lnt&tbs=qdr:m&sa=X&start={p}0&ved=0ahUKEwip4vrhn-LuAhWvF6YKHehzA7MQpwUIKA&biw=1408&bih=703&dpr=1')
+    loc = f' document.querySelector("#rcnt")'
+    result=(driver.execute_script("return " + loc).get_attribute("textContent"))
+    if 'did not match any news results' in str(result):
+        p=0
+    else:
+        pages.append(f'https://www.google.com/search?q=SP500&hl=en&gl=us&tbm=nws&sxsrf=ALeKk01DGNvt2_D0FUXt8XxnZfMs2iHuDQ:1613060804366&source=lnt&tbs=qdr:m&sa=X&start={p}0&ved=0ahUKEwip4vrhn-LuAhWvF6YKHehzA7MQpwUIKA&biw=1408&bih=703&dpr=1')
+        p = p + 1
+
+#get all the websites
+for i in range (len(pages)):
+    driver.get(pages[i])
+    count=len(driver.execute_script("return document.querySelectorAll('#rso > div')"))
+    for i in range(1,count+1):
+        url_con = f' document.querySelector("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a")'
+        urls.append(driver.execute_script("return " + url_con).get_attribute("href"))
+        con=f' document.querySelectorAll("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a > div>div")'
+        #with a thumbnail
+        if len(driver.execute_script("return " + con))==2:
+            titles_con= f' document.querySelector("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a > div > div.hI5pFf > div.JheGif.nDgy9d")'
+            titles.append(driver.execute_script("return " + titles_con).get_attribute("textContent"))
+            dates_con=f' document.querySelector("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a > div > div.hI5pFf > div.yJHHTd > div.wxp1Sb > span > span > span")'
+            dates.append(driver.execute_script("return " + dates_con).get_attribute("textContent"))
+        #without a thumbnail
+        if len(driver.execute_script("return " + con))==3:
+            titles_con =f' document.querySelector("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a > div > div.JheGif.nDgy9d")'
+            titles.append(driver.execute_script("return " + titles_con).get_attribute("textContent"))
+            dates_con =f' document.querySelector("#rso > div:nth-child({i}) > g-card > div > div > div.dbsr > a > div > div.yJHHTd > div.wxp1Sb")'
+            dates.append(driver.execute_script("return " + dates_con).get_attribute("textContent"))
+
+#get images and contents
+for i in range(len(urls)):
+    article = Article(urls[i].strip())
+    img=''
+    content=''
+    try:
+        article.download()
+        article.parse()
+        content = article.text
+        contents.append(content)
+        for temp in article.images:
+            img=img+str(temp)
+        imgs.append(img)
+    except:
+        contents.append('Unable to see the article')
+        imgs.append('Unable to see the article')
+        continue
+
+#insert data into excel
+for i in range(len(urls)):
+    maxrow = (sheet1.max_row)
+    sheet1['A'+str(maxrow+1)] = dates[i]
+    sheet1['B'+str(maxrow+1)] = titles[i]
+    sheet1['C' + str(maxrow + 1)] = contents[i]
+    sheet1['D'+str(maxrow+1)] = imgs[i]
+
+wb.save('SP500.xlsx')
